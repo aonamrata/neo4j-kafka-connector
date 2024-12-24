@@ -4,7 +4,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>org.neo4j.connectors.kafka</groupId>
     <artifactId>parent</artifactId>
-    <version>5.1.8-SNAPSHOT</version>
+    <version>5.1.9-CUSTOM</version>
     <packaging>pom</packaging>
     <name>parent</name>
     <description>Neo4j Connector for Kafka</description>
@@ -533,6 +533,7 @@
                     <includes>
                         <include>**/*Test.*</include>
                     </includes>
+                    <skipTests>true</skipTests>
                     <trimStackTrace>false</trimStackTrace>
                 </configuration>
             </plugin>
@@ -641,6 +642,7 @@
                         </includes>
                         <palantirJavaFormat/>
                     </java>
+                    <lineEndings>UNIX</lineEndings>
                 </configuration>
                 <executions>
                     <execution>

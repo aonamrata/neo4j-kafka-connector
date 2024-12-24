@@ -25,8 +25,11 @@ import org.neo4j.cypherdsl.core.Node
 import org.neo4j.cypherdsl.core.Relationship
 import org.neo4j.cypherdsl.core.renderer.Renderer
 import org.neo4j.driver.Query
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 class CdcSchemaHandler(val topic: String, private val renderer: Renderer) : CdcHandler() {
+  private val logger: Logger = LoggerFactory.getLogger(javaClass)
 
   override fun strategy() = SinkStrategy.CDC_SCHEMA
 
@@ -59,30 +62,30 @@ class CdcSchemaHandler(val topic: String, private val renderer: Renderer) : CdcH
     if (event.after == null) {
       throw InvalidDataException("update operation requires 'after' field in the event object")
     }
-
-    val node = buildNode(event.keys, "n")
-    val stmt =
-        Cypher.merge(node)
-            .mutate(node, Cypher.parameter("nProps", event.mutatedProperties()))
-            .let {
-              val addedLabels = event.addedLabels()
-              if (addedLabels.isNotEmpty()) {
-                it.set(node, addedLabels)
-              } else {
-                it
-              }
-            }
-            .let {
-              val removedLabels = event.removedLabels()
-              if (removedLabels.isNotEmpty()) {
-                it.remove(node, removedLabels)
-              } else {
-                it
-              }
-            }
-            .build()
-
-    return Query(renderer.render(stmt), stmt.parameters)
+    return transformCreate(event)
+    //    val node = buildNode(event.keys, "n")
+    //    val stmt =
+    //        Cypher.merge(node)
+    //            .mutate(node, Cypher.parameter("nProps", event.mutatedProperties()))
+    //            .let {
+    //              val addedLabels = event.addedLabels()
+    //              if (addedLabels.isNotEmpty()) {
+    //                it.set(node, addedLabels)
+    //              } else {
+    //                it
+    //              }
+    //            }
+    //            .let {
+    //              val removedLabels = event.removedLabels()
+    //              if (removedLabels.isNotEmpty()) {
+    //                it.remove(node, removedLabels)
+    //              } else {
+    //                it
+    //              }
+    //            }
+    //            .build()
+    //
+    //    return Query(renderer.render(stmt), stmt.parameters)
   }
 
   override fun transformDelete(event: NodeEvent): Query {
@@ -115,14 +118,14 @@ class CdcSchemaHandler(val topic: String, private val renderer: Renderer) : CdcH
     if (event.after == null) {
       throw InvalidDataException("update operation requires 'after' field in the event object")
     }
-
-    val (start, end, rel, matchNodes) = buildRelationship(event, "r", false)
-    val stmt =
-        (if (matchNodes) Cypher.merge(start).merge(end).merge(rel) else Cypher.match(rel))
-            .mutate(rel, Cypher.parameter("rProps", event.mutatedProperties()))
-            .build()
-
-    return Query(renderer.render(stmt), stmt.parameters)
+    return transformCreate(event)
+    //    val (start, end, rel, matchNodes) = buildRelationship(event, "r", false)
+    //    val stmt =
+    //        (if (matchNodes) Cypher.merge(start).merge(end).merge(rel) else Cypher.match(rel))
+    //            .mutate(rel, Cypher.parameter("rProps", event.mutatedProperties()))
+    //            .build()
+    //
+    //    return Query(renderer.render(stmt), stmt.parameters)
   }
 
   override fun transformDelete(event: RelationshipEvent): Query {
@@ -139,6 +142,8 @@ class CdcSchemaHandler(val topic: String, private val renderer: Renderer) : CdcH
       keys: Map<String, List<Map<String, Any>>>,
       named: String,
   ): Node {
+    logger.trace("Node keys: {}", keys)
+
     val validKeys =
         keys
             .mapValues { kvp -> kvp.value.filter { it.isNotEmpty() } }
@@ -149,6 +154,7 @@ class CdcSchemaHandler(val topic: String, private val renderer: Renderer) : CdcH
           "schema strategy requires at least one node key with valid properties on node aliased '$named'.",
       )
     }
+    logger.trace("Node validKeys: {}", validKeys)
 
     val node =
         Cypher.node(validKeys.keys.first(), validKeys.keys.drop(1))
@@ -186,6 +192,9 @@ class CdcSchemaHandler(val topic: String, private val renderer: Renderer) : CdcH
       forCreate: Boolean
   ): RelationshipOutput {
     val relationshipHasKeys = event.keys.filter { it.isNotEmpty() }.any()
+    logger.trace("Relationship keys: {}", event.keys)
+    logger.trace("Relationship start.keys: {}", event.start.keys)
+    logger.trace("Relationship end.keys: {}", event.end.keys)
 
     // if this is a create event, we enforce start and end key properties
     // else we check whether relationship has its own keys or not

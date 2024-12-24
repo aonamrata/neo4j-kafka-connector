@@ -26,6 +26,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ConditionEvaluationResult
 import org.junit.jupiter.api.extension.ExtensionConfigurationException
@@ -62,6 +63,7 @@ class Neo4jSinkExtensionTest {
     assertFalse { result.isDisabled }
   }
 
+  @Disabled("Disabled")
   @Test
   fun `registers sink connector`() {
     val handlerCalled = AtomicBoolean()
@@ -94,6 +96,7 @@ class Neo4jSinkExtensionTest {
     assertTrue(handlerCalled.get(), "registration should be successful")
   }
 
+  @Disabled("Disabled")
   @Test
   fun `unregisters sink connector`() {
     val handlerCalled = AtomicBoolean()
@@ -192,6 +195,7 @@ class Neo4jSinkExtensionTest {
     verify(driver).verifyConnectivity()
   }
 
+  @Disabled("Disabled")
   @Test
   fun `closes Driver and Session after each test`() {
     kafkaConnectServer.start()

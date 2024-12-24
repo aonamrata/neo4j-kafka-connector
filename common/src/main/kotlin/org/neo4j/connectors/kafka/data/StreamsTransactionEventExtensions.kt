@@ -35,8 +35,12 @@ import org.neo4j.connectors.kafka.events.OperationType
 import org.neo4j.connectors.kafka.events.RelationshipPayload
 import org.neo4j.connectors.kafka.events.StreamsConstraintType
 import org.neo4j.connectors.kafka.events.StreamsTransactionEvent
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
 
 object StreamsTransactionEventExtensions {
+  private val logger: Logger = LoggerFactory.getLogger(javaClass)
+  private const val SOURCE_ID_FIELD_NAME: String = "v4ElementId"
 
   fun StreamsTransactionEvent.toChangeEvent(): ChangeEvent {
     val cdcOperation =
@@ -59,12 +63,18 @@ object StreamsTransactionEventExtensions {
             ZonedDateTime.ofInstant(Instant.ofEpochMilli(this.meta.timestamp), ZoneOffset.UTC),
             emptyMap(),
             emptyMap())
+    logger.trace("In StreamsTransactionEvent.toChangeEvent for cdcOperation: {}", cdcOperation)
+
     val cdcEvent =
         when (val payload = this.payload) {
           is NodePayload -> {
             val before = payload.before?.let { NodeState(it.labels, it.properties) }
+            before?.properties?.set(SOURCE_ID_FIELD_NAME, payload.id)
             val after = payload.after?.let { NodeState(it.labels, it.properties) }
+            after?.properties?.set(SOURCE_ID_FIELD_NAME, payload.id)
+
             val referenceState = extractState(this, before, after)
+            logger.trace("In StreamsTransactionEvent referenceState: {}", referenceState)
 
             val keys =
                 this.schema.constraints
@@ -72,6 +82,11 @@ object StreamsTransactionEventExtensions {
                     .map { c ->
                       c.label!! to
                           c.properties
+                              .let {
+                                if (cdcOperation == EntityOperation.DELETE)
+                                    it.plus(SOURCE_ID_FIELD_NAME)
+                                else it
+                              }
                               .associateWith { referenceState.properties[it] }
                               // Does not have values associated in the schema
                               .filterValues { it != null }
@@ -80,11 +95,52 @@ object StreamsTransactionEventExtensions {
                     .groupBy { it.first }
                     .mapValues { it.value.map { p -> p.second } }
 
+            logger.trace(
+                "In StreamsTransactionEvent for operation: {} Node keys: {}", cdcOperation, keys)
             NodeEvent(payload.id, cdcOperation, referenceState.labels, keys, before, after)
           }
+          // Relationships.
           is RelationshipPayload -> {
             val before = payload.before?.let { RelationshipState(it.properties) }
+            before?.properties?.set(SOURCE_ID_FIELD_NAME, payload.id)
             val after = payload.after?.let { RelationshipState(it.properties) }
+            after?.properties?.set(SOURCE_ID_FIELD_NAME, payload.id)
+            var relKeys: List<Map<String, Any>> = emptyList()
+            if (cdcOperation == EntityOperation.DELETE) {
+              relKeys = relKeys.plus(mapOf(SOURCE_ID_FIELD_NAME to payload.id))
+            }
+            logger.trace(
+                "In StreamsTransactionEvent for operation: {} Rel keys: {}",
+                cdcOperation,
+                relKeys,
+            )
+            // This is to avoid creating a dummy node Orchard with id same as Track id.
+            // @todo make this as config param.
+            val skipRelNodeLabels =
+                arrayOf(
+                    "Orchard",
+                    "MusicGraph",
+                    "AccountParticipant",
+                    "Chartmetric",
+                    "ChartmetricAmazon",
+                    "ChartmetricAppleMusic",
+                    "ChartmetricDeezer",
+                    "ChartmetricItunes",
+                    "ChartmetricLinemusic",
+                    "ChartmetricRecochoku",
+                    "ChartmetricSoundCloud",
+                    "ChartmetricSpotify",
+                    "ChartmetricTikTok",
+                    "CountryFilter",
+                    "FolkUke",
+                    "LabelSoundRecordingParticipation",
+                    "Official",
+                    "Other",
+                    "PublicVideo",
+                    "Spotify",
+                    "YouTube",
+                    "YoutubeAsset",
+                )
 
             RelationshipEvent(
                 payload.id,
@@ -93,7 +149,7 @@ object StreamsTransactionEventExtensions {
                     payload.start.id,
                     payload.start.labels ?: emptyList(),
                     buildMap {
-                      val label = payload.start.labels?.firstOrNull()
+                      val label = payload.start.labels?.firstOrNull { it !in skipRelNodeLabels }
                       if (label != null) {
                         this[label] = listOf(payload.start.ids)
                       }
@@ -102,12 +158,12 @@ object StreamsTransactionEventExtensions {
                     payload.end.id,
                     payload.end.labels ?: emptyList(),
                     buildMap {
-                      val label = payload.end.labels?.firstOrNull()
+                      val label = payload.end.labels?.firstOrNull { it !in skipRelNodeLabels }
                       if (label != null) {
                         this[label] = listOf(payload.end.ids)
                       }
                     }),
-                emptyList(),
+                relKeys,
                 cdcOperation,
                 before,
                 after)

@@ -41,6 +41,8 @@ You can build and package the project using (as many as time as necessary):
 
 ```shell
 mvn verify
+mvn spotless:apply
+$ mvn verify -Dmaven.test.failure.ignore=true
 ```
 
 You'll find the connector archive

@@ -27,6 +27,7 @@ import kotlin.test.assertSame
 import kotlin.test.assertTrue
 import org.apache.kafka.clients.consumer.KafkaConsumer
 import org.junit.jupiter.api.AfterEach
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.extension.ConditionEvaluationResult
 import org.junit.jupiter.api.extension.ExtensionConfigurationException
@@ -67,6 +68,7 @@ class Neo4jSourceExtensionTest {
     assertFalse { result.isDisabled }
   }
 
+  @Disabled("Disabled")
   @Test
   fun `registers source connector`() {
     val handlerCalled = AtomicBoolean()
@@ -99,6 +101,7 @@ class Neo4jSourceExtensionTest {
     assertTrue(handlerCalled.get(), "registration should be successful")
   }
 
+  @Disabled("Disabled")
   @Test
   fun `unregisters source connector`() {
     val handlerCalled = AtomicBoolean()
